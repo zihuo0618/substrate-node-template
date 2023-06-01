@@ -27,7 +27,7 @@ use sp_version::RuntimeVersion;
 pub use frame_support::{
 	construct_runtime, parameter_types,
 	traits::{
-		ConstU128, ConstU32, ConstU64, ConstU8, KeyOwnerProofSystem, Randomness, StorageInfo,
+		ConstU128, ConstU32, ConstU64, ConstU8, KeyOwnerProofSystem, StorageInfo,
 	},
 	weights::{
 		constants::{
@@ -45,9 +45,13 @@ use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter, Multiplier
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
+pub use pallet_poe;
 /// Import the template pallet.
 pub use pallet_template;
-pub use pallet_poe;
+
+pub use pallet_kitties;
+use pallet_insecure_randomness_collective_flip;
+
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -274,6 +278,14 @@ impl pallet_poe::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 }
 
+impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
+
+
+impl pallet_kitties::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Randomness = Randomness;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub struct Runtime
@@ -292,6 +304,8 @@ construct_runtime!(
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
 		PoeModule: pallet_poe,
+		KittiesModule: pallet_kitties,
+		Randomness: pallet_insecure_randomness_collective_flip
 	}
 );
 
