@@ -1,6 +1,16 @@
 use super::*;
 use crate::{mock::*, Error, Event, Kitties, KittyId, NextKittyId};
 use frame_support::{assert_noop, assert_ok};
+use frame_support::dispatch::DispatchResult;
+
+fn create_kitty(account_id: u64) -> DispatchResult {
+	KittiesModule::create_kitty(RuntimeOrigin::signed(account_id), *b"12345678")
+}
+
+fn bread(account_id: u64, kitty_id1: u32, kitty_id2: u32) -> DispatchResult {
+	KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id1, kitty_id2, *b"12345678")
+}
+
 
 #[test]
 fn it_works_for_create() {
@@ -8,7 +18,7 @@ fn it_works_for_create() {
 		let kitty_id = 0;
 		let account_id = 1;
 		assert_eq!(KittiesModule::next_kitty_id(), kitty_id);
-		assert_ok!(KittiesModule::create_kitty(RuntimeOrigin::signed(account_id)));
+		assert_ok!(create_kitty(account_id));
 
 		assert_eq!(KittiesModule::next_kitty_id(), kitty_id + 1);
 		assert_eq!(KittiesModule::kitties(kitty_id).is_some(), true);
@@ -17,7 +27,7 @@ fn it_works_for_create() {
 
 		NextKittyId::<Test>::set(KittyId::max_value());
 		assert_noop!(
-			KittiesModule::create_kitty((RuntimeOrigin::signed(account_id))),
+			create_kitty(account_id),
 			Error::<Test>::InvalidKittyId
 		);
 
@@ -39,11 +49,11 @@ fn it_works_for_breed() {
 		let kitty_id = 0;
 		let account_id = 1;
 		assert_noop!(
-			KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id),
+			bread(account_id, kitty_id, kitty_id),
 			Error::<Test>::SameKittyId
 		);
-		assert_ok!(KittiesModule::create_kitty(RuntimeOrigin::signed(account_id)));
-		assert_ok!(KittiesModule::create_kitty(RuntimeOrigin::signed(account_id)));
+		assert_ok!(create_kitty(account_id));
+		assert_ok!(create_kitty(account_id));
 
 		assert_eq!(KittiesModule::kitties(0).is_some(), true);
 		assert_eq!(KittiesModule::kitties(1).is_some(), true);
@@ -53,15 +63,15 @@ fn it_works_for_breed() {
 		assert_eq!(KittiesModule::kitty_parent(1), None);
 
 		assert_noop!(
-			KittiesModule::breed(RuntimeOrigin::signed(account_id), 2, kitty_id),
+			bread(account_id, 2, kitty_id),
 			Error::<Test>::InvalidKittyId
 		);
 		assert_noop!(
-			KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, 2),
+			bread(account_id, kitty_id, 2),
 			Error::<Test>::InvalidKittyId
 		);
 
-		assert_ok!(KittiesModule::breed(RuntimeOrigin::signed(account_id), 0, 1));
+		assert_ok!(bread(account_id, 0, 1));
 		// 判断最后一次事件是否是 KittyBreed
 		System::assert_last_event(
 			Event::KittyBreed { who: 1, kitty_id: 2, kitty: KittiesModule::kitties(2).unwrap() }
@@ -85,7 +95,7 @@ fn it_works_for_transfered() {
 			KittiesModule::transfer(RuntimeOrigin::signed(account_id), recipient, kitty_id),
 			Error::<Test>::InvalidKittyId
 		);
-		assert_ok!(KittiesModule::create_kitty(RuntimeOrigin::signed(account_id)));
+		assert_ok!(create_kitty(account_id));
 		assert_eq!(KittiesModule::kitty_owner(0), Some(account_id));
 
 		assert_noop!(
@@ -100,5 +110,71 @@ fn it_works_for_transfered() {
 		assert_eq!(KittiesModule::kitties(0).is_some(), true);
 		assert_eq!(KittiesModule::kitty_owner(0), Some(recipient));
 		assert_eq!(KittiesModule::kitty_parent(0), None);
+	})
+}
+
+#[test]
+fn it_works_for_buy() {
+	new_test_ext().execute_with(|| {
+		let kitty_id = 0;
+		let account_id = 1;
+		let next_account_id = 2;
+
+		assert_noop!(
+			KittiesModule::buy(RuntimeOrigin::signed(account_id), kitty_id),
+			Error::<Test>::InvalidKittyId
+		);
+
+		assert_ok!(create_kitty(account_id));
+
+		assert_noop!(
+			KittiesModule::buy(RuntimeOrigin::signed(account_id), kitty_id),
+			Error::<Test>::AlreadyOwned
+		);
+
+		assert_ok!(create_kitty(next_account_id));
+
+		assert_noop!(
+			KittiesModule::buy(RuntimeOrigin::signed(account_id), 1),
+			Error::<Test>::NotOnSale
+		);
+
+		// 将kitty置为sale状态
+		assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(account_id), kitty_id));
+		// 购买kitty
+		assert_ok!(KittiesModule::buy(RuntimeOrigin::signed(next_account_id), kitty_id));
+		// 判断购买后kitty的拥有者是否为购买的人
+		assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(next_account_id));
+		// 判断kitty是否从待销售状态中移除
+		assert_eq!(KittiesModule::kitty_on_sale(kitty_id), None);
+	})
+}
+
+#[test]
+fn it_works_for_sale() {
+	new_test_ext().execute_with(|| {
+		let kitty_id = 0;
+		let account_id = 1;
+		let next_account_id = 2;
+
+		assert_noop!(
+			KittiesModule::buy(RuntimeOrigin::signed(account_id), kitty_id),
+			Error::<Test>::InvalidKittyId
+		);
+		assert_ok!(create_kitty(account_id));
+		assert_noop!(
+			KittiesModule::sale(RuntimeOrigin::signed(next_account_id), kitty_id),
+			Error::<Test>::NotOwner
+		);
+
+		assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(account_id), kitty_id));
+		// kitty置为sale状态
+		assert_eq!(KittiesModule::kitty_on_sale(kitty_id), Some(()));
+
+		// 断言重复销售
+		assert_noop!(
+			KittiesModule::sale(RuntimeOrigin::signed(account_id), kitty_id),
+			Error::<Test>::AlreadyOnSale
+		);
 	})
 }
