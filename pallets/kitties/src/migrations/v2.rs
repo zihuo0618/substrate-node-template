@@ -4,7 +4,6 @@ use frame_support::Blake2_128Concat;
 use frame_support::migration::storage_key_iter;
 use frame_support::weights::Weight;
 use frame_support::StoragePrefixedMap;
-use sp_runtime::print;
 
 use crate::{Config, Kitties, Kitty, KittyId, Pallet};
 
@@ -38,6 +37,7 @@ pub fn migrate<T: Config>() -> Weight {
             };
             Kitties::<T>::insert(&index, &new_kitty);
         }
+        current_version.put::<Pallet<T>>();
     } else if on_chain_version == 1 && current_version == 2 {
         for (index, kitty) in storage_key_iter::<KittyId, OldKitty_V1, Blake2_128Concat>(module, item).drain() {
             let mut new_name = [0u8; 8];
@@ -48,6 +48,7 @@ pub fn migrate<T: Config>() -> Weight {
             };
             Kitties::<T>::insert(&index, &new_kitty);
         }
+        current_version.put::<Pallet<T>>();
     }
     Weight::zero()
 }

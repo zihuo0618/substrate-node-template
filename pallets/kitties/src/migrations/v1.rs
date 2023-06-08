@@ -34,5 +34,6 @@ pub fn migrate<T: Config>() ->Weight {
         };
         Kitties::<T>::insert(&index, &new_kitty);
     }
+    current_version.put::<Pallet<T>>();
     Weight::zero()
 }
